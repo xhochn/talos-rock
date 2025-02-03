@@ -6,7 +6,7 @@ on:
       - main
       - development
   schedule:
-    - cron: '0 3 * * 1'  # Weekly build every Monday at 03:00 UTC
+    - cron: '0 3 * * *'  # Daily build at 03:00 UTC
 
 jobs:
   matrix_prep:
@@ -20,6 +20,10 @@ jobs:
       - name: Extract Branch Name
         id: get_branch
         run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+
+      - name: Set Current Date
+        id: set_date
+        run: echo "current_date=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
 
       - name: Filter Matrix
         id: set-matrix
@@ -36,6 +40,14 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Restore Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/build
+          key: build-cache-${{ env.current_date }}
+          restore-keys: |
+            build-cache-
 
       - name: Setup Build Environment
         run: |
