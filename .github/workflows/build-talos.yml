@@ -68,7 +68,7 @@ jobs:
           sha256sum talos/output/talos-${{ matrix.board }}.img > talos/output/talos-${{ matrix.board }}.img.sha256
 
       - name: Upload Image as Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: talos-${{ matrix.board }}
           path: |
