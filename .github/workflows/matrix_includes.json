@@ -3,14 +3,14 @@
     "board": "rock-5b",
     "kernel_branch": "linux-6.1-stan-rkr4.1",
     "uboot_branch": "next-dev-v2024.10",
-    "nvme": "enabled",
+    "nvme": "nvme-disabled",
     "runOnBranch": "any"
   },
   {
     "board": "rock-5b",
     "kernel_branch": "linux-6.1-stan-rkr4.1",
     "uboot_branch": "next-dev-v2024.10",
-    "nvme": "disabled",
+    "nvme": "nvme-disabled",
     "runOnBranch": "development"
   }
 ]
