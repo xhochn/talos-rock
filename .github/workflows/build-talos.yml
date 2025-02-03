@@ -20,7 +20,9 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y git make gcc aarch64-linux-gnu-gcc libssl-dev bc bison flex
+          sudo apt-get install -y git make gcc g++ \
+          gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+          libssl-dev bc bison flex
 
       - name: Clone Rockchip Kernel
         run: |
