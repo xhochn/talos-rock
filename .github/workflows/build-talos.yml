@@ -1,0 +1,66 @@
+name: Build Talos Linux for Rockchip Boards
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 3 * * 1'  # Weekly build every Monday at 03:00 UTC
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board: [rock5-itx, rock5b]  # List of supported boards
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git make gcc aarch64-linux-gnu-gcc libssl-dev bc bison flex
+
+      - name: Clone Rockchip Kernel
+        run: |
+          git clone https://github.com/rockchip-linux/kernel.git -b stable-5.10 kernel
+          cd kernel
+          git clone https://github.com/google/gasket-driver.git
+          cp -r gasket-driver/* drivers/staging/gasket/
+
+      - name: Apply Board-Specific Config
+        run: |
+          cd kernel
+          cp ../boards/${{ matrix.board }}.config .config
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+
+      - name: Build Talos Image
+        run: |
+          git clone https://github.com/siderolabs/talos.git
+          cd talos
+          cp ../kernel/arch/arm64/boot/Image build/kernel/
+          make image
+
+      - name: Generate Checksum
+        run: |
+          sha256sum talos/output/talos-${{ matrix.board }}.img > talos/output/talos-${{ matrix.board }}.img.sha256
+
+      - name: Upload Image as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: talos-${{ matrix.board }}
+          path: |
+            talos/output/talos-${{ matrix.board }}.img
+            talos/output/talos-${{ matrix.board }}.img.sha256
+
+      - name: Release Image
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            talos/output/talos-${{ matrix.board }}.img
+            talos/output/talos-${{ matrix.board }}.img.sha256
+          tag_name: v${{ github.run_number }}
+          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }} with Google Coral TPU support."
