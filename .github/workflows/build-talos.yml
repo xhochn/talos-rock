@@ -36,6 +36,26 @@ jobs:
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
 
+      - name: Build U-Boot
+        run: |
+          git clone https://github.com/rockchip-linux/u-boot.git -b stable-2023.07 u-boot-rockchip
+          cd u-boot-rockchip
+          make ${{ matrix.board }}-rk3588_defconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+          cp idbloader.img u-boot.itb trust.img ../output/
+
+      - name: Enable Additional Drivers
+        run: |
+          cd kernel
+          echo "CONFIG_DRM_PANFROST=y" >> .config  # Panfrost GPU
+          echo "CONFIG_MALI_GPU_PARTIAL_RENDER=y" >> .config
+          echo "CONFIG_RTL8852BE=y" >> .config  # Networking
+          echo "CONFIG_RTL88XXAU=y" >> .config
+          echo "CONFIG_USB_NET_CDCETHER=y" >> .config
+          echo "CONFIG_USB_NET_RNDIS_HOST=y" >> .config
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+
       - name: Build Talos Image
         run: |
           git clone https://github.com/siderolabs/talos.git
@@ -54,6 +74,9 @@ jobs:
           path: |
             talos/output/talos-${{ matrix.board }}.img
             talos/output/talos-${{ matrix.board }}.img.sha256
+            output/idbloader-${{ matrix.board }}.img
+            output/u-boot-${{ matrix.board }}.itb
+            output/trust-${{ matrix.board }}.img
 
       - name: Release Image
         if: github.ref == 'refs/heads/main'
@@ -62,5 +85,8 @@ jobs:
           files: |
             talos/output/talos-${{ matrix.board }}.img
             talos/output/talos-${{ matrix.board }}.img.sha256
+            output/idbloader-${{ matrix.board }}.img
+            output/u-boot-${{ matrix.board }}.itb
+            output/trust-${{ matrix.board }}.img
           tag_name: v${{ github.run_number }}
-          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }} with Google Coral TPU support."
+          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }} with U-Boot modifications, GPU, and Networking support."
