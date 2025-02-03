@@ -13,6 +13,7 @@ jobs:
     strategy:
       matrix:
         board: [rock5-itx, rock5b]  # List of supported boards
+        nvme: [enabled, disabled]   # NVMe boot support options
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -26,10 +27,7 @@ jobs:
 
       - name: Clone Rockchip Kernel
         run: |
-          git clone https://github.com/rockchip-linux/kernel.git -b stable-5.10 kernel
-          cd kernel
-          git clone https://github.com/google/gasket-driver.git
-          cp -r gasket-driver/* drivers/staging/gasket/
+          git clone https://github.com/rockchip-linux/kernel.git -b develop-4.4 kernel
 
       - name: Apply Board-Specific Config
         run: |
@@ -43,6 +41,15 @@ jobs:
           git clone https://github.com/rockchip-linux/u-boot.git -b stable-2023.07 u-boot-rockchip
           cd u-boot-rockchip
           make ${{ matrix.board }}-rk3588_defconfig
+          if [ "${{ matrix.nvme }}" == "enabled" ]; then
+            echo "Enabling NVMe support in U-Boot..."
+            sed -i 's|#define CONFIG_CMD_NVME|#define CONFIG_CMD_NVME|' include/configs/rk3588_common.h
+            sed -i 's|#define CONFIG_NVME|#define CONFIG_NVME|' include/configs/rk3588_common.h
+            sed -i 's|#define CONFIG_BLK|#define CONFIG_BLK|' include/configs/rk3588_common.h
+            sed -i 's|#define CONFIG_PCI|#define CONFIG_PCI|' include/configs/rk3588_common.h
+          else
+            echo "NVMe support is disabled in this build."
+          fi
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
           cp idbloader.img u-boot.itb trust.img ../output/
 
@@ -72,13 +79,13 @@ jobs:
       - name: Upload Image as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: talos-${{ matrix.board }}
+          name: talos-${{ matrix.board }}-nvme-${{ matrix.nvme }}
           path: |
             talos/output/talos-${{ matrix.board }}.img
             talos/output/talos-${{ matrix.board }}.img.sha256
-            output/idbloader-${{ matrix.board }}.img
-            output/u-boot-${{ matrix.board }}.itb
-            output/trust-${{ matrix.board }}.img
+            output/idbloader.img
+            output/u-boot.itb
+            output/trust.img
 
       - name: Release Image
         if: github.ref == 'refs/heads/main'
@@ -87,8 +94,8 @@ jobs:
           files: |
             talos/output/talos-${{ matrix.board }}.img
             talos/output/talos-${{ matrix.board }}.img.sha256
-            output/idbloader-${{ matrix.board }}.img
-            output/u-boot-${{ matrix.board }}.itb
-            output/trust-${{ matrix.board }}.img
+            output/idbloader.img
+            output/u-boot.itb
+            output/trust.img
           tag_name: v${{ github.run_number }}
-          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }} with U-Boot modifications, GPU, and Networking support."
+          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }} with NVMe support: ${{ matrix.nvme }}."
