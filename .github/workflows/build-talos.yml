@@ -81,8 +81,7 @@ jobs:
         run: |
           git clone https://github.com/radxa/u-boot.git -b ${{ matrix.uboot_branch }} u-boot-radxa
           cd u-boot-radxa
-          # make ${{ matrix.board }}-rk3588_defconfig
-          make rock-5-itx-rk3588_defconfig
+          make ${{ matrix.board }}-rk3588_defconfig
           if [ "${{ matrix.nvme }}" == "enabled" ]; then
             echo "Enable NVMe support in U-Boot..."
             # Add NVMe support configurations here if needed
