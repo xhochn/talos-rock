@@ -4,7 +4,7 @@
     "kernel_branch": "linux-6.1-stan-rkr4.1",
     "uboot_branch": "a5f622b9e2d564cedd10f4ec21ed44ee51ef1cd0",
     "nvme": "nvme-disabled",
-    "runOnBranch": "any"
+    "runOnBranch": "develop"
   },
   {
     "board": "rock-5b",
