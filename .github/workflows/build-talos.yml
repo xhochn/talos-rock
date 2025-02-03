@@ -21,10 +21,6 @@ jobs:
         id: get_branch
         run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
 
-      - name: Set Current Date
-        id: set_date
-        run: echo "current_date=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-
       - name: Filter Matrix
         id: set-matrix
         uses: JoshuaTheMiller/conditional-build-matrix@v2.0.1
@@ -41,14 +37,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Restore Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/build
-          key: build-cache-${{ env.current_date }}
-          restore-keys: |
-            build-cache-
-
       - name: Setup Build Environment
         run: |
           sudo apt-get update
@@ -56,7 +44,18 @@ jobs:
           gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
           libssl-dev bc bison flex
 
+      - name: Cache Kernel Build
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: kernel
+          key: kernel-${{ matrix.kernel_branch }}-${{ matrix.board }}-${{ runner.os }}-build-cache
+          restore-keys: |
+            kernel-${{ matrix.kernel_branch }}-${{ runner.os }}-build-cache
+            kernel-${{ runner.os }}-build-cache
+
       - name: Clone Radxa Kernel
+        if: steps.cache-kernel.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/radxa/kernel.git -b ${{ matrix.kernel_branch }} kernel
 
@@ -67,12 +66,21 @@ jobs:
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
 
+      - name: Cache U-Boot Build
+        id: cache-uboot
+        uses: actions/cache@v4
+        with:
+          path: u-boot-radxa
+          key: uboot-${{ matrix.uboot_branch }}-${{ matrix.board }}-${{ runner.os }}-build-cache
+          restore-keys: |
+            uboot-${{ matrix.uboot_branch }}-${{ runner.os }}-build-cache
+            uboot-${{ runner.os }}-build-cache
+
       - name: Build U-Boot
+        if: steps.cache-uboot.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/radxa/u-boot.git -b ${{ matrix.uboot_branch }} u-boot-radxa
           cd u-boot-radxa
-          make distclean
-          mkdir -p arch/arm64/include/asm/arch
           make ${{ matrix.board }}-rk3588_defconfig
           if [ "${{ matrix.nvme }}" == "enabled" ]; then
             echo "Enable NVMe support in U-Boot..."
@@ -81,6 +89,7 @@ jobs:
             echo "NVMe support is disabled in this build."
           fi
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+          mkdir -p ../output
           cp idbloader.img u-boot.itb trust.img ../output/
 
       - name: Enable Additional Drivers
