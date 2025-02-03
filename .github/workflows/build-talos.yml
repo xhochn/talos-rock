@@ -8,6 +8,12 @@ on:
   schedule:
     - cron: '0 3 * * *'  # Daily build at 03:00 UTC
 
+permissions:
+  contents: write  # Allows pushing changes to the repository
+  issues: write    # Allows creating and managing issues
+  packages: write  # Allows publishing packages
+  pull-requests: write  # Allows creating and managing pull requests
+
 jobs:
   matrix_prep:
     runs-on: ubuntu-latest
