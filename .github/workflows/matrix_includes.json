@@ -1,16 +1,16 @@
 [
-    {
-      "board": "rock5-itx",
-      "kernel_branch": "linux-6.1-stan-rkr4.1",
-      "uboot_branch": "next-dev-v2024.10",
-      "nvme": "disabled",
-      "runOnBranch": "main"
-    },
-    {
-      "board": "rock5b",
-      "kernel_branch": "linux-6.1-stan-rkr4.1",
-      "uboot_branch": "next-dev-v2024.10",
-      "nvme": "disabled",
-      "runOnBranch": "development"
-    }
-  ]
+  {
+    "board": "rock-5b",
+    "kernel_branch": "linux-6.1-stable",
+    "uboot_branch": "next-dev-v2024.10",
+    "nvme": "enabled",
+    "runOnBranch": "any"
+  },
+  {
+    "board": "rock-5b",
+    "kernel_branch": "linux-6.1-stable",
+    "uboot_branch": "next-dev-v2024.10",
+    "nvme": "disabled",
+    "runOnBranch": "development"
+  }
+]
