@@ -1,10 +1,9 @@
-# Talos Linux for Rockchip Boards (Rock 5 ITX, Rock 5B, …)
+# Talos-Rock: Talos Linux for Rockchip Boards
 
-**Automated Talos Linux builds for Rockchip RK3588 boards with Google Coral TPU support.**
+Welcome to the **Talos-Rock** repository! This project provides configurations and workflows to build [Talos Linux](https://www.talos.dev/) images tailored for Rockchip-based single-board computers (SBCs), such as the Rock 5 ITX and Rock 5B.
 
-## 🚀 Installation
-1. Download the latest release from [GitHub Releases](https://github.com/xhochn/talos-rock/releases).
-2. Write the image to an SD card or eMMC:
-   ```sh
-   dd if=talos-rock5b.img of=/dev/sdX bs=4M status=progress
-   sync
+## Features
+
+- **Custom Kernel Builds**: Compile and integrate kernels optimized for Rockchip hardware.
+- **Optional NVMe Boot Support**: Configure U-Boot with or without NVMe boot capabilities.
+- **Automated Builds**: Utilize GitHub Actions for seamless image building and artifact management.
