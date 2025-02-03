@@ -4,76 +4,95 @@ on:
   push:
     branches:
       - main
+      - development
   schedule:
-    - cron: '0 3 * * 1'  # Weekly build every Monday at 03:00 UTC
+    - cron: '0 3 * * 1'  # Wöchentlicher Build jeden Montag um 03:00 UTC
 
 jobs:
-  build:
+  matrix_prep:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        board: [rock5-itx, rock5b]  # List of supported boards
-        nvme: [nvme-enabled, nvme-disabled]   # NVMe boot support options
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout Repository
+      - name: Repository auschecken
         uses: actions/checkout@v4
 
-      - name: Setup Build Environment
+      - name: Branch-Name extrahieren
+        id: get_branch
+        run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+
+      - name: Matrix filtern
+        id: set-matrix
+        uses: JoshuaTheMiller/conditional-build-matrix@v2.0.1
+        with:
+          filter: '[?runOnBranch==`${{ env.branch_name }}` || runOnBranch==`any`]'
+          inputFile: '.github/workflows/matrix_includes.json'
+
+  build:
+    needs: matrix_prep
+    strategy:
+      matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Build-Umgebung einrichten
         run: |
           sudo apt-get update
           sudo apt-get install -y git make gcc g++ \
           gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
           libssl-dev bc bison flex
 
-      - name: Clone Radxa Kernel
+      - name: Radxa Kernel klonen
         run: |
-          git clone https://github.com/radxa/kernel.git -b linux-6.1-stan-rkr4.1 kernel
+          git clone https://github.com/radxa/kernel.git -b ${{ matrix.kernel_branch }} kernel
 
-      - name: Apply Board-Specific Config
+      - name: Board-spezifische Konfiguration anwenden
         run: |
           cd kernel
           cp ../boards/${{ matrix.board }}.config .config
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
 
-      - name: Build U-Boot
+      - name: U-Boot bauen
         run: |
-          git clone https://github.com/radxa/u-boot.git -b next-dev-v2024.10 u-boot-radxa
+          git clone https://github.com/radxa/u-boot.git -b ${{ matrix.uboot_branch }} u-boot-radxa
           cd u-boot-radxa
-          make ${{ matrix.board }}-defconfig
+          make ${{ matrix.board }}_defconfig
           if [ "${{ matrix.nvme }}" == "enabled" ]; then
-            echo "Enabling NVMe support in U-Boot..."
-            # Add NVMe support configurations here if necessary
+            echo "NVMe-Unterstützung in U-Boot aktivieren..."
+            # Fügen Sie hier ggf. Konfigurationen für NVMe-Unterstützung hinzu
           else
-            echo "NVMe support is disabled in this build."
+            echo "NVMe-Unterstützung ist in diesem Build deaktiviert."
           fi
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
           cp idbloader.img u-boot.itb trust.img ../output/
 
-      - name: Enable Additional Drivers
+      - name: Zusätzliche Treiber aktivieren
         run: |
           cd kernel
           echo "CONFIG_DRM_PANFROST=y" >> .config  # Panfrost GPU
           echo "CONFIG_MALI_GPU_PARTIAL_RENDER=y" >> .config
-          echo "CONFIG_RTL8852BE=y" >> .config  # Networking
+          echo "CONFIG_RTL8852BE=y" >> .config  # Netzwerk
           echo "CONFIG_RTL88XXAU=y" >> .config
           echo "CONFIG_USB_NET_CDCETHER=y" >> .config
           echo "CONFIG_USB_NET_RNDIS_HOST=y" >> .config
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
 
-      - name: Build Talos Image
+      - name: Talos-Image bauen
         run: |
           git clone https://github.com/siderolabs/talos.git
           cd talos
           cp ../kernel/arch/arm64/boot/Image build/kernel/
           make image
 
-      - name: Generate Checksum
+      - name: Prüfsumme generieren
         run: |
           sha256sum talos/output/talos-${{ matrix.board }}.img > talos/output/talos-${{ matrix.board }}.img.sha256
 
-      - name: Upload Image as Artifact
+      - name: Image als Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
           name: talos-${{ matrix.board }}-nvme-${{ matrix.nvme }}
@@ -84,15 +103,10 @@ jobs:
             output/u-boot.itb
             output/trust.img
 
-      - name: Release Image
+      - name: Image veröffentlichen
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
           files: |
             talos/output/talos-${{ matrix.board }}.img
-            talos/output/talos-${{ matrix.board }}.img.sha256
-            output/idbloader.img
-            output/u-boot.itb
-            output/trust.img
-          tag_name: v${{ github.run_number }}
-          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }} with NVMe support: ${{ matrix.nvme }}."
+            talos/output/talos-${{
