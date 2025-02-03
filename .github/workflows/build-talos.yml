@@ -6,7 +6,7 @@ on:
       - main
       - development
   schedule:
-    - cron: '0 3 * * 1'  # Wöchentlicher Build jeden Montag um 03:00 UTC
+    - cron: '0 3 * * 1'  # Weekly build every Monday at 03:00 UTC
 
 jobs:
   matrix_prep:
@@ -14,14 +14,14 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Repository auschecken
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Branch-Name extrahieren
+      - name: Extract branch name
         id: get_branch
         run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
 
-      - name: Matrix filtern
+      - name: Filter matrix
         id: set-matrix
         uses: JoshuaTheMiller/conditional-build-matrix@v2.0.1
         with:
@@ -34,65 +34,65 @@ jobs:
       matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Repository auschecken
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build-Umgebung einrichten
+      - name: Setup build environment
         run: |
           sudo apt-get update
           sudo apt-get install -y git make gcc g++ \
           gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
           libssl-dev bc bison flex
 
-      - name: Radxa Kernel klonen
+      - name: Clone Radxa Kernel
         run: |
           git clone https://github.com/radxa/kernel.git -b ${{ matrix.kernel_branch }} kernel
 
-      - name: Board-spezifische Konfiguration anwenden
+      - name: Apply board-specific configuration
         run: |
           cd kernel
           cp ../boards/${{ matrix.board }}.config .config
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
 
-      - name: U-Boot bauen
+      - name: Build U-Boot
         run: |
           git clone https://github.com/radxa/u-boot.git -b ${{ matrix.uboot_branch }} u-boot-radxa
           cd u-boot-radxa
-          make ${{ matrix.board }}_defconfig
+          make ${{ matrix.board }}-rk3588_defconfig
           if [ "${{ matrix.nvme }}" == "enabled" ]; then
-            echo "NVMe-Unterstützung in U-Boot aktivieren..."
-            # Fügen Sie hier ggf. Konfigurationen für NVMe-Unterstützung hinzu
+            echo "Enable NVMe support in U-Boot..."
+            # Add NVMe support configurations here if needed
           else
-            echo "NVMe-Unterstützung ist in diesem Build deaktiviert."
+            echo "NVMe support is disabled in this build."
           fi
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
           cp idbloader.img u-boot.itb trust.img ../output/
 
-      - name: Zusätzliche Treiber aktivieren
+      - name: Enable additional drivers
         run: |
           cd kernel
           echo "CONFIG_DRM_PANFROST=y" >> .config  # Panfrost GPU
           echo "CONFIG_MALI_GPU_PARTIAL_RENDER=y" >> .config
-          echo "CONFIG_RTL8852BE=y" >> .config  # Netzwerk
+          echo "CONFIG_RTL8852BE=y" >> .config  # Network
           echo "CONFIG_RTL88XXAU=y" >> .config
           echo "CONFIG_USB_NET_CDCETHER=y" >> .config
           echo "CONFIG_USB_NET_RNDIS_HOST=y" >> .config
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
 
-      - name: Talos-Image bauen
+      - name: Build Talos image
         run: |
           git clone https://github.com/siderolabs/talos.git
           cd talos
           cp ../kernel/arch/arm64/boot/Image build/kernel/
           make image
 
-      - name: Prüfsumme generieren
+      - name: Generate checksum
         run: |
           sha256sum talos/output/talos-${{ matrix.board }}.img > talos/output/talos-${{ matrix.board }}.img.sha256
 
-      - name: Image als Artefakt hochladen
+      - name: Upload image as artifact
         uses: actions/upload-artifact@v4
         with:
           name: talos-${{ matrix.board }}-nvme-${{ matrix.nvme }}
@@ -103,10 +103,10 @@ jobs:
             output/u-boot.itb
             output/trust.img
 
-      - name: Image veröffentlichen
+      - name: Publish image
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
           files: |
             talos/output/talos-${{ matrix.board }}.img
-            talos/output/talos-${{
+            talos/output/talos-${{ matrix.board }}.img.sha256
