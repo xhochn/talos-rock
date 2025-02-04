@@ -15,12 +15,29 @@ permissions:
   pull-requests: write  # Allows creating and managing pull requests
 
 jobs:
-  build:
+  matrix_prep:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Extract Branch Name
+        id: get_branch
+        run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+
+      - name: Set Matrix Data
+        id: set-matrix
+        run: |
+          matrix=$(jq -c '.include | map(select(.runOnBranch == "any" or .runOnBranch == env.branch_name))' < ./matrix_config.json)
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+  build:
+    needs: matrix_prep
     strategy:
-      matrix:
-        board: [rock-5-itx, other-board]  # Add more boards here
-        profile: [rk2410, other-profile]   # Add more profiles here
+      matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -34,7 +51,7 @@ jobs:
           podman podman-docker
           sudo touch /etc/containers/nodocker
 
-      - name: Cache BSP Source Code
+      - name: Cache BSP Source
         id: cache-bsp
         uses: actions/cache@v4
         with:
@@ -44,7 +61,7 @@ jobs:
             bsp-${{ matrix.board }}-${{ runner.os }}-build-cache
             bsp-${{ runner.os }}-build-cache
 
-      - name: Clone BSP Source Code
+      - name: Clone BSP Source
         if: steps.cache-bsp.outputs.cache-hit != 'true'
         run: |
           git clone --recurse-submodules https://github.com/radxa-repo/bsp.git
@@ -87,7 +104,7 @@ jobs:
         run: |
           sha256sum talos/output/talos-${{ matrix.board }}.img > talos/output/talos-${{ matrix.board }}.img.sha256
 
-      - name: Upload Artifacts
+      - name: Upload Image as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: talos-${{ matrix.board }}
