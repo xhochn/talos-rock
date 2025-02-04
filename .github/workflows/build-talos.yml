@@ -48,7 +48,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git make gcc g++ \
           gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-          libssl-dev bc bison flex
+          libssl-dev bc bison flex qemu-user-static binfmt-support
 
       - name: Cache Kernel Build
         id: cache-kernel
@@ -76,33 +76,22 @@ jobs:
         id: cache-uboot
         uses: actions/cache@v4
         with:
-          path: u-boot-radxa
-          key: uboot-${{ matrix.uboot_branch }}-${{ matrix.board }}-${{ runner.os }}-build-cache
+          path: bsp
+          key: bsp-uboot-${{ matrix.board }}-${{ runner.os }}-build-cache
           restore-keys: |
-            uboot-${{ matrix.uboot_branch }}-${{ runner.os }}-build-cache
-            uboot-${{ runner.os }}-build-cache
+            bsp-uboot-${{ runner.os }}-build-cache
 
-      - name: Build U-Boot
+      - name: Build U-Boot using Radxa BSP
         if: steps.cache-uboot.outputs.cache-hit != 'true'
         run: |
-          # Clone the BSP repository
           git clone --recurse-submodules https://github.com/radxa-repo/bsp.git
           cd bsp
-
-          # Install required dependencies
-          sudo apt-get update
-          sudo apt-get install -y git qemu-user-static binfmt-support podman podman-docker
-          sudo touch /etc/containers/nodocker
-
-          # Build U-Boot using BSP for ROCK 5 ITX with rk2410 profile
-          ./bsp u-boot rk2410 rock-5-itx --no-build
-
-          # Compile U-Boot
-          ./bsp --no-prepare-source u-boot rk2410 rock-5-itx
-
-          # Copy the generated U-Boot images to the output directory
+          . ./bsp env init
+          . ./bsp env set PRODUCT=${{ matrix.board }}
+          . ./bsp env set PROFILE=rk2410
+          . ./bsp u-boot
           mkdir -p ../output
-          cp .src/u-boot/idbloader.img .src/u-boot/u-boot.itb .src/u-boot/trust.img ../output/
+          cp out/u-boot/idbloader.img out/u-boot/u-boot.itb out/u-boot/trust.img ../output/
 
       - name: Enable Additional Drivers
         run: |
