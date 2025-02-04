@@ -86,7 +86,7 @@ jobs:
         if: steps.cache-uboot.outputs.cache-hit != 'true'
         run: |
           # git clone https://github.com/radxa/u-boot.git -b ${{ matrix.uboot_branch }} u-boot-radxa
-          git clone https://github.com/Kwiboo/u-boot-rockchip.git rk3xxx-2025.04 u-boot-radxa
+          git clone https://github.com/Kwiboo/u-boot-rockchip.git -b rk3xxx-2025.04 u-boot-radxa
           cd u-boot-radxa
           make distclean
           make ${{ matrix.board }}-rk3588_defconfig
