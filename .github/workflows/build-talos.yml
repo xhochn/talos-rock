@@ -85,20 +85,24 @@ jobs:
       - name: Build U-Boot
         if: steps.cache-uboot.outputs.cache-hit != 'true'
         run: |
-          # git clone https://github.com/radxa/u-boot.git -b ${{ matrix.uboot_branch }} u-boot-radxa
-          git clone https://github.com/Kwiboo/u-boot-rockchip.git -b rk3xxx-2025.04 u-boot-radxa
-          cd u-boot-radxa
-          make distclean
-          make ${{ matrix.board }}-rk3588_defconfig
-          if [ "${{ matrix.nvme }}" == "enabled" ]; then
-            echo "Enable NVMe support in U-Boot..."
-            # Add NVMe support configurations here if needed
-          else
-            echo "NVMe support is disabled in this build."
-          fi
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+          # Clone the BSP repository
+          git clone --recurse-submodules https://github.com/radxa-repo/bsp.git
+          cd bsp
+
+          # Install required dependencies
+          sudo apt-get update
+          sudo apt-get install -y git qemu-user-static binfmt-support podman podman-docker
+          sudo touch /etc/containers/nodocker
+
+          # Build U-Boot using BSP for ROCK 5 ITX with rk2410 profile
+          ./bsp u-boot rk2410 rock-5-itx --no-build
+
+          # Compile U-Boot
+          ./bsp --no-prepare-source u-boot rk2410 rock-5-itx
+
+          # Copy the generated U-Boot images to the output directory
           mkdir -p ../output
-          cp idbloader.img u-boot.itb trust.img ../output/
+          cp .src/u-boot/idbloader.img .src/u-boot/u-boot.itb .src/u-boot/trust.img ../output/
 
       - name: Enable Additional Drivers
         run: |
