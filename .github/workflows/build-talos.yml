@@ -15,30 +15,12 @@ permissions:
   pull-requests: write  # Allows creating and managing pull requests
 
 jobs:
-  matrix_prep:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Extract Branch Name
-        id: get_branch
-        run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-
-      - name: Filter Matrix
-        id: set-matrix
-        uses: JoshuaTheMiller/conditional-build-matrix@v2.0.1
-        with:
-          filter: '[?runOnBranch==`${{ env.branch_name }}` || runOnBranch==`any`]'
-          inputFile: '.github/workflows/matrix_includes.json'
-
   build:
-    needs: matrix_prep
+    runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
-    runs-on: ubuntu-24.04-arm
+      matrix:
+        board: [rock-5-itx, other-board]  # Add more boards here
+        profile: [rk2410, other-profile]   # Add more profiles here
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -48,54 +30,43 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git make gcc g++ \
           gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-          libssl-dev bc bison flex qemu-user-static binfmt-support
+          libssl-dev bc bison flex qemu-user-static binfmt-support \
+          podman podman-docker
+          sudo touch /etc/containers/nodocker
 
-      - name: Cache Kernel Build
-        id: cache-kernel
-        uses: actions/cache@v4
-        with:
-          path: kernel
-          key: kernel-${{ matrix.kernel_branch }}-${{ matrix.board }}-${{ runner.os }}-build-cache
-          restore-keys: |
-            kernel-${{ matrix.kernel_branch }}-${{ runner.os }}-build-cache
-            kernel-${{ runner.os }}-build-cache
-
-      - name: Clone Radxa Kernel
-        if: steps.cache-kernel.outputs.cache-hit != 'true'
-        run: |
-          git clone https://github.com/radxa/kernel.git -b ${{ matrix.kernel_branch }} kernel
-
-      - name: Apply Board-Specific Configuration
-        run: |
-          cd kernel
-          cp ../boards/${{ matrix.board }}.config .config
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
-
-      - name: Cache U-Boot Build
-        id: cache-uboot
+      - name: Cache BSP Source Code
+        id: cache-bsp
         uses: actions/cache@v4
         with:
           path: bsp
-          key: bsp-uboot-${{ matrix.board }}-${{ runner.os }}-build-cache
+          key: bsp-${{ matrix.board }}-${{ matrix.profile }}-${{ runner.os }}-build-cache
           restore-keys: |
-            bsp-uboot-${{ runner.os }}-build-cache
+            bsp-${{ matrix.board }}-${{ runner.os }}-build-cache
+            bsp-${{ runner.os }}-build-cache
 
-      - name: Build U-Boot using Radxa BSP
-        if: steps.cache-uboot.outputs.cache-hit != 'true'
+      - name: Clone BSP Source Code
+        if: steps.cache-bsp.outputs.cache-hit != 'true'
         run: |
           git clone --recurse-submodules https://github.com/radxa-repo/bsp.git
           cd bsp
-          . ./bsp env init
-          . ./bsp env set PRODUCT=${{ matrix.board }}
-          . ./bsp env set PROFILE=rk2410
-          . ./bsp u-boot
-          mkdir -p ../output
-          cp out/u-boot/idbloader.img out/u-boot/u-boot.itb out/u-boot/trust.img ../output/
+          git submodule update --init --recursive
+
+      - name: Initialize BSP Environment
+        run: |
+          cd bsp
+          ./bsp env init
+          ./bsp env set PRODUCT=${{ matrix.board }}
+          ./bsp env set PROFILE=${{ matrix.profile }}
+
+      - name: Build U-Boot and Kernel
+        run: |
+          cd bsp
+          ./bsp u-boot
+          ./bsp linux stable
 
       - name: Enable Additional Drivers
         run: |
-          cd kernel
+          cd bsp/output/linux
           echo "CONFIG_DRM_PANFROST=y" >> .config  # Panfrost GPU
           echo "CONFIG_MALI_GPU_PARTIAL_RENDER=y" >> .config
           echo "CONFIG_RTL8852BE=y" >> .config  # Network
@@ -109,23 +80,23 @@ jobs:
         run: |
           git clone https://github.com/siderolabs/talos.git
           cd talos
-          cp ../kernel/arch/arm64/boot/Image build/kernel/
+          cp ../bsp/output/linux/arch/arm64/boot/Image build/kernel/
           make image
 
       - name: Generate Checksum
         run: |
           sha256sum talos/output/talos-${{ matrix.board }}.img > talos/output/talos-${{ matrix.board }}.img.sha256
 
-      - name: Upload Image as Artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: talos-${{ matrix.board }}-nvme-${{ matrix.nvme }}
+          name: talos-${{ matrix.board }}
           path: |
             talos/output/talos-${{ matrix.board }}.img
             talos/output/talos-${{ matrix.board }}.img.sha256
-            output/idbloader.img
-            output/u-boot.itb
-            output/trust.img
+            bsp/output/u-boot/idbloader.img
+            bsp/output/u-boot/u-boot.itb
+            bsp/output/u-boot/trust.img
 
       - name: Publish Image
         if: github.ref == 'refs/heads/main'
@@ -134,8 +105,8 @@ jobs:
           files: |
             talos/output/talos-${{ matrix.board }}.img
             talos/output/talos-${{ matrix.board }}.img.sha256
-            output/idbloader.img
-            output/u-boot.itb
-            output/trust.img
+            bsp/output/u-boot/idbloader.img
+            bsp/output/u-boot/u-boot.itb
+            bsp/output/u-boot/trust.img
           tag_name: v${{ github.run_number }}
-          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }} with NVMe support: ${{ matrix.nvme }}."
+          body: "Talos Linux Build #${{ github.run_number }} for ${{ matrix.board }}."
