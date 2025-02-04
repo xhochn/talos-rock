@@ -57,6 +57,13 @@ jobs:
           ./bsp u-boot ${{ matrix.profile }} ${{ matrix.board }}
           ./bsp linux ${{ matrix.profile }} ${{ matrix.board }}
 
+      - name: Verify Kernel Output Directory
+        run: |
+          if [ ! -d "bsp/output/linux" ]; then
+            echo "Error: Kernel output directory 'bsp/output/linux' does not exist."
+            exit 1
+          fi
+
       - name: Enable Additional Drivers
         run: |
           cd bsp/output/linux
