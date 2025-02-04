@@ -68,18 +68,11 @@ jobs:
           cd bsp
           git submodule update --init --recursive
 
-      - name: Initialize BSP Environment
+      - name: Build U-Boot and Kernel using BSP
         run: |
           cd bsp
-          ./bsp env init
-          ./bsp env set PRODUCT=${{ matrix.board }}
-          ./bsp env set PROFILE=${{ matrix.profile }}
-
-      - name: Build U-Boot and Kernel
-        run: |
-          cd bsp
-          ./bsp u-boot
-          ./bsp linux stable
+          ./bsp u-boot ${{ matrix.profile }} ${{ matrix.board }}
+          ./bsp linux ${{ matrix.profile }} ${{ matrix.board }}
 
       - name: Enable Additional Drivers
         run: |
